@@ -9,6 +9,12 @@
 3. 使用Panorado软件打开和查看全景图 使用Panorado软件打开和查看全景图
 4. 简单易用的图形界面 简单易用的图形界面
 
+![GUI](https://github.com/user-attachments/assets/87ac9109-1064-4cbc-8af1-5431d7ae0e9b)
+![TEST1](https://github.com/user-attachments/assets/b1826c50-7e9d-4871-817a-cff3d0edc601)
+![TEST2](https://github.com/user-attachments/assets/8b510822-08aa-44bd-b241-26fe542a1b8d)
+
+
+
 ## 安装说明
 
 1. 确保您的系统已安装Python 3.7或更高版本。 确保您的系统已安装Python 3.7或更高版本。
