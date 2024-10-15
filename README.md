@@ -13,7 +13,9 @@
 ![TEST1](https://github.com/user-attachments/assets/b1826c50-7e9d-4871-817a-cff3d0edc601)
 ![TEST2](https://github.com/user-attachments/assets/8b510822-08aa-44bd-b241-26fe542a1b8d)
 
+## 使用技巧
 
+默认对于横版1:2的图像支持最好
 
 ## 安装说明
 
