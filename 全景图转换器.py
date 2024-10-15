@@ -12,10 +12,11 @@ import zipfile
 
 logging.basicConfig(level=logging.DEBUG)
 
-# 定义保存路径
-SAVE_PATH = r"C:\Users\ZYB\Desktop\PIP脚本汇总\临时保存"
-# 确保保存路径存在
-os.makedirs(SAVE_PATH, exist_ok=True)
+# 默认保存路径
+DEFAULT_SAVE_PATH = r"C:\Users\ZYB\Desktop\PIP脚本汇总\临时保存"
+
+def ensure_save_path(path):
+    os.makedirs(path, exist_ok=True)
 
 def create_panorama_from_single_image(input_image):
     # 将PIL Image转换为numpy数组
@@ -35,45 +36,47 @@ def create_panorama_from_single_image(input_image):
 
     return Image.fromarray(panorama)
 
-def process_non_panorama(input_image):
+def process_non_panorama(input_image, save_path):
     if input_image is None:
         return None, "请先上传非全景图片。"
     try:
+        ensure_save_path(save_path)
         # 清除之前的处理结果
-        for file in os.listdir(SAVE_PATH):
-            file_path = os.path.join(SAVE_PATH, file)
+        for file in os.listdir(save_path):
+            file_path = os.path.join(save_path, file)
             if os.path.isfile(file_path):
                 os.unlink(file_path)
         
         # 生成唯一的文件名
         filename = f"panorama_{os.urandom(8).hex()}.png"
-        save_path = os.path.join(SAVE_PATH, filename)
+        save_file_path = os.path.join(save_path, filename)
         
         # 创建全景图并保存
         panorama = create_panorama_from_single_image(input_image)
-        panorama.save(save_path)
+        panorama.save(save_file_path)
         
-        return Image.open(save_path), "已将图片转换为全景图。"
+        return Image.open(save_file_path), "已将图片转换为全景图。"
     except Exception as e:
         logging.error(f"处理图像时发生错误: {str(e)}")
         return None, f"处理图像时发生错误: {str(e)}"
 
-def process_panorama(input_image):
+def process_panorama(input_image, save_path):
     if input_image is None:
         return None, "请先上传全景图片。"
     try:
+        ensure_save_path(save_path)
         # 清除之前的处理结果
-        for file in os.listdir(SAVE_PATH):
-            file_path = os.path.join(SAVE_PATH, file)
+        for file in os.listdir(save_path):
+            file_path = os.path.join(save_path, file)
             if os.path.isfile(file_path):
                 os.unlink(file_path)
         
         # 生成唯一的文件名
         filename = f"original_{os.urandom(8).hex()}.png"
-        save_path = os.path.join(SAVE_PATH, filename)
+        save_file_path = os.path.join(save_path, filename)
         
         # 保存原始全景图
-        input_image.save(save_path)
+        input_image.save(save_file_path)
         
         return input_image, "全景图已保存，准备使用Panorado打开。"
     except Exception as e:
@@ -120,7 +123,7 @@ def download_and_install_panorado():
             os.remove(exe_path)
         raise
 
-def view_with_panorado(message, panorado_path):
+def view_with_panorado(message, panorado_path, save_path):
     panorado_exe = find_panorado(panorado_path)
     if not panorado_exe:
         download_link = "https://www.panorado.com/Download/Panorado50Setup64.exe"
@@ -128,7 +131,7 @@ def view_with_panorado(message, panorado_path):
     
     try:
         # 获取最新保存的图片路径
-        latest_image = max([os.path.join(SAVE_PATH, f) for f in os.listdir(SAVE_PATH)], key=os.path.getctime)
+        latest_image = max([os.path.join(save_path, f) for f in os.listdir(save_path)], key=os.path.getctime)
         
         subprocess.Popen([panorado_exe, latest_image])
         
@@ -153,22 +156,24 @@ with gr.Blocks() as iface:
     
     panorado_path = gr.Textbox(label="Panorado路径", value=DEFAULT_PANORADO_PATH)
     
+    save_path = gr.Textbox(label="保存路径", value=DEFAULT_SAVE_PATH)
+    
     result_text = gr.Textbox(label="结果")
     
-    def process_and_view(image, path, process_func):
-        result, message = process_func(image)
-        view_result = view_with_panorado(message, path)
+    def process_and_view(image, panorado_path, save_path, process_func):
+        result, message = process_func(image, save_path)
+        view_result = view_with_panorado(message, panorado_path, save_path)
         return result, view_result
     
     non_panorama_input.change(
-        fn=lambda img, path: process_and_view(img, path, process_non_panorama),
-        inputs=[non_panorama_input, panorado_path],
+        fn=lambda img, path, save: process_and_view(img, path, save, process_non_panorama),
+        inputs=[non_panorama_input, panorado_path, save_path],
         outputs=[panorama_output, result_text]
     )
     
     panorama_input.change(
-        fn=lambda img, path: process_and_view(img, path, process_panorama),
-        inputs=[panorama_input, panorado_path],
+        fn=lambda img, path, save: process_and_view(img, path, save, process_panorama),
+        inputs=[panorama_input, panorado_path, save_path],
         outputs=[panorama_output, result_text]
     )
 
