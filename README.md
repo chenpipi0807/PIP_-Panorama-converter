@@ -55,11 +55,12 @@ https://github.com/user-attachments/assets/83199a04-0b43-4473-bfbf-003a60780f18
    - 下载并运行安装程序 下载并运行安装程序
    - 记住Panorado的安装路径（默认为  记住Panorado的安装路径（默认为 `C:\Program Files\Panorado\Panorado64.exe`））
 
-## 使用方法
+## 使用方法（已更新）
 
 1.全景图转换 是用来做转换的，之前的版本是用一个三方软件看图
+
 2.look是直接看全景图的。可以录视频。
-   ```
+ 
 在浏览器中打开显示的本地URL（通常是 http://127.0.0.1:7860）。 在浏览器中打开显示的本地URL（通常是 http://127.0.0.1:7860）。
 
 
