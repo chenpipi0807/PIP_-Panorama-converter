@@ -84,43 +84,29 @@ def process_panorama(input_image, save_path):
         logging.error(f"处理图像时发生错误: {str(e)}")
         return None, f"处理图像时发生错误: {str(e)}"
 
-def view_with_look(image_path):
-    try:
-        # 启动 look.py 查看器
-        look_script_path = os.path.join(os.path.dirname(__file__), 'look.py')
-        
-        # 使用 subprocess 启动新的 Python 进程运行 look.py
-        env = os.environ.copy()
-        env['PYTHONPATH'] = os.path.dirname(__file__)  # 确保能找到相关模块
-        
-        # 将图片路径作为参数传递给 look.py
-        subprocess.Popen([
-            'python', 
-            look_script_path,
-            '--image', 
-            image_path
-        ], env=env)
-        
-        return f"已使用全景图查看器打开图片: {image_path}"
-    except Exception as e:
-        logging.error(f"启动查看器时发生错误: {str(e)}")
-        return f"启动查看器失败: {str(e)}"
+def find_panorado(custom_path=None):
+    if custom_path and os.path.exists(custom_path):
+        return custom_path
+    if os.path.exists(DEFAULT_PANORADO_PATH):
+        return DEFAULT_PANORADO_PATH
+    return None
 
-def process_and_view(image, save_path, process_func):
+def view_with_panorado(message, panorado_path, save_path):
+    panorado_exe = find_panorado(panorado_path)
+    if not panorado_exe:
+        download_link = "https://www.panorado.com/Download/Panorado50Setup64.exe"
+        return f"未找到Panorado程序。请从以下链接下载并安装Panorado: {download_link}\n安装后,请在上方输入框中输入Panorado的安装路径。"
+    
     try:
-        result, message = process_func(image, save_path)
-        if result:
-            # 获取最新保存的图片路径
-            latest_image = max(
-                [os.path.join(save_path, f) for f in os.listdir(save_path)], 
-                key=os.path.getctime
-            )
-            view_result = view_with_look(latest_image)
-            return result, f"{message}\n{view_result}"
-        return result, message
+        # 获取最新保存的图片路径
+        latest_image = max([os.path.join(save_path, f) for f in os.listdir(save_path)], key=os.path.getctime)
+        
+        subprocess.Popen([panorado_exe, latest_image])
+        
+        return f"已使用Panorado打开全景图。请检查Panorado窗口。\n{message}"
     except Exception as e:
-        logging.error(f"处理图像时发生错误: {str(e)}")
-        return None, f"处理失败: {str(e)}"
+        logging.error(f"打开Panorado时发生错误: {str(e)}")
+        return f"处理图像时发生错误: {str(e)}"
 
 def process_folder(input_folder, output_folder):
     input_folder = Path(input_folder)
@@ -169,19 +155,24 @@ with gr.Blocks() as iface:
         output_folder = gr.Textbox(label="输出文件夹路径")
         process_button = gr.Button("开始批量处理")
     
+    panorado_path = gr.Textbox(label="Panorado路径", value=DEFAULT_PANORADO_PATH)
     save_path = gr.Textbox(label="保存路径", value=DEFAULT_SAVE_PATH)
     result_text = gr.Textbox(label="结果")
     
-    # 修改事件处理函数
+    def process_and_view(image, panorado_path, save_path, process_func):
+        result, message = process_func(image, save_path)
+        view_result = view_with_panorado(message, panorado_path, save_path)
+        return result, view_result
+    
     non_panorama_input.change(
-        fn=lambda img, save: process_and_view(img, save, process_non_panorama),
-        inputs=[non_panorama_input, save_path],
+        fn=lambda img, path, save: process_and_view(img, path, save, process_non_panorama),
+        inputs=[non_panorama_input, panorado_path, save_path],
         outputs=[panorama_output, result_text]
     )
     
     panorama_input.change(
-        fn=lambda img, save: process_and_view(img, save, process_panorama),
-        inputs=[panorama_input, save_path],
+        fn=lambda img, path, save: process_and_view(img, path, save, process_panorama),
+        inputs=[panorama_input, panorado_path, save_path],
         outputs=[panorama_output, result_text]
     )
     
