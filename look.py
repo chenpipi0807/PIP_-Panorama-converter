@@ -10,10 +10,13 @@ import threading
 import json
 from datetime import datetime
 
+# 在文件开头添加
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
+
 # 设置输出目录
-output_dir = "output"
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
 
 # HTML模板中添加调试信息显示
 viewer_html = """
@@ -322,23 +325,21 @@ def start_server(port=None):
 
 def process_image(input_image):
     try:
-        # 确保图片是RGB模式
-        if input_image.mode != 'RGB':
-            input_image = input_image.convert('RGB')
+        # 确保输出目录存在
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
         
-        # 保存原始图片，不做任何处理
-        input_path = os.path.join(output_dir, "input_image.jpg")
+        # 使用相对路径保存文件
+        input_path = os.path.join(OUTPUT_DIR, "input_image.jpg")
         input_image.save(input_path, format='JPEG', quality=95)
         print(f"图片已保存到: {input_path}")
         
         # 保存配置
-        config = {
-            "width": input_image.width,
-            "height": input_image.height
-        }
-        config_path = os.path.join(output_dir, "image_config.json")
+        config_path = os.path.join(OUTPUT_DIR, "image_config.json")
         with open(config_path, "w") as f:
-            json.dump(config, f)
+            json.dump({
+                "width": input_image.width,
+                "height": input_image.height
+            }, f)
         
         # 启动本地服务器
         httpd, port = start_server()
@@ -370,6 +371,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='全景图查看器')
     parser.add_argument('--image', help='要打开的图片路径')
+    parser.add_argument('--share', action='store_true', help='启用局域网共享')
+    parser.add_argument('--server-name', default='127.0.0.1', help='服务器IP地址')
     args = parser.parse_args()
     
     # 确保在output目录下运行服务器
@@ -380,4 +383,9 @@ if __name__ == "__main__":
         input_image = Image.open(args.image)
         process_image(input_image)
     
-    iface.launch()
+    # 启动界面，支持共享
+    iface.launch(
+        server_name=args.server_name,
+        share=args.share,
+        inbrowser=False  # 主程序已经会打开浏览器，这里不需要重复打开
+    )
