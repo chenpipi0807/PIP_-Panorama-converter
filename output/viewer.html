@@ -1,0 +1,434 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全景图查看器</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <style>
+    #panorama {
+        width: 100vw;
+        height: 100vh;
+    }
+    #toggleButton {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 100;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    #debugInfo {
+        position: fixed;
+        top: 50px;
+        right: 10px;
+        z-index: 100;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border-radius: 5px;
+        font-size: 12px;
+    }
+    /* 添加录制按钮样式 */
+    #recordButton {
+        position: fixed;
+        top: 10px;
+        right: 120px;  /* 位于切换按钮左侧 */
+        z-index: 100;
+        padding: 10px;
+        background: rgba(255, 0, 0, 0.5);
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    
+    #recordingOverlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.1); /* 略微可见的遮罩 */
+        z-index: 99;
+        cursor: not-allowed;
+    }
+    
+    #recordingStatus {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        border-radius: 10px;
+        display: none;
+        font-size: 16px;
+        z-index: 100;
+    }
+    </style>
+</head>
+<body>
+    <button id="recordButton" onclick="toggleRecording()">开始录制</button>
+    <button id="toggleButton" onclick="toggleProjection()">切换到球面投影</button>
+    <div id="debugInfo"></div>
+    <div id="panorama"></div>
+    <div id="recordingOverlay"></div>
+    <div id="recordingStatus">录制中...</div>
+    <script>
+    let currentType = 'cylindrical';
+    let viewer;
+    let imageConfig = null;
+    // 添加录制相关变量
+    let mediaRecorder;
+    let recordedChunks = [];
+    let isRecording = false;
+    let originalConfig = null;
+    
+    function updateDebugInfo(config) {
+        if (!viewer) return;
+        
+        const debugDiv = document.getElementById('debugInfo');
+        debugDiv.innerHTML = `
+            当前模式: ${currentType}<br>
+            图片URL: ${viewer.getConfig().panorama}<br>
+            垂直视角: ${viewer.getConfig().vaov}°<br>
+            最大俯仰角: ${viewer.getConfig().maxPitch}°<br>
+            水平视场角: ${viewer.getHfov().toFixed(1)}°<br>
+            当前旋转角度: ${viewer.getYaw().toFixed(1)}°<br>
+            当前俯仰角度: ${viewer.getPitch().toFixed(1)}°
+        `;
+    }
+    
+    // 加载图片配置
+    fetch('image_config.json')
+        .then(response => response.json())
+        .then(config => {
+            console.log('加载图片配置:', config);
+            imageConfig = config;
+            initViewer('cylindrical');
+        })
+        .catch(error => {
+            console.error('加载配置失败:', error);
+            document.getElementById('debugInfo').innerHTML = '配置加载失败: ' + error.message;
+        });
+    
+    function initViewer(type) {
+        if (viewer) {
+            viewer.destroy();
+        }
+        
+        // 基础配置
+        const config = {
+            "type": "equirectangular",
+            "panorama": window.location.href.replace('viewer.html', '') + 'input_image.jpg',
+            "autoLoad": true,
+            "yaw": 0,  // 设置初始水平角度
+            "pitch": 0, // 设置初始俯仰角
+            "hfov": 90, // 设置初始视场角
+            "compass": true, // 显示指南针
+            "autoRotate": -2, // 可选：设置自动旋转速度
+            "autoRotateInactivityDelay": 3000 // 3秒无操作后开始自动旋转
+        };
+        
+        if (type === 'cylindrical') {
+            config.vaov = 105;       // 垂直视角
+            config.maxPitch = 40;    // 最大俯仰角
+            config.minPitch = -40;   // 最小俯仰角
+            config.hfov = 90;        // 水平视场角
+        }
+        
+        console.log('使用配置:', config);
+        
+        try {
+            viewer = pannellum.viewer('panorama', config);
+            
+            // 添加视角变化事件监听
+            viewer.on('mousedown', updateDebugInfo);
+            viewer.on('touchstart', updateDebugInfo);
+            viewer.on('mouseup', updateDebugInfo);
+            viewer.on('touchend', updateDebugInfo);
+            viewer.on('animatefinished', updateDebugInfo);
+            
+            // 期更新调试息
+            setInterval(() => {
+                updateDebugInfo(config);
+            }, 100);
+            
+            console.log('查看器初始化成功');
+        } catch (error) {
+            console.error('查看器初始化失败:', error);
+            document.getElementById('debugInfo').innerHTML = '初始化失败: ' + error.message;
+        }
+    }
+    
+    function toggleProjection() {
+        const button = document.getElementById('toggleButton');
+        if (currentType === 'cylindrical') {
+            currentType = 'equirectangular';
+            button.textContent = '切换到柱面投影';
+        } else {
+            currentType = 'cylindrical';
+            button.textContent = '切换到球面影';
+        }
+        console.log('切换投影模式到:', currentType);
+        initViewer(currentType);
+    }
+    
+    // 添加录制功能
+    async function toggleRecording() {
+        const recordButton = document.getElementById('recordButton');
+        const overlay = document.getElementById('recordingOverlay');
+        const status = document.getElementById('recordingStatus');
+        
+        if (!isRecording) {
+            // 禁用按钮显示遮罩
+            recordButton.disabled = true;
+            overlay.style.display = 'block';
+            status.style.display = 'block';
+            
+            try {
+                // 开始录制
+                const stream = document.getElementById('panorama').querySelector('canvas').captureStream(30);
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9',
+                    videoBitsPerSecond: 8000000  // 8Mbps
+                });
+                
+                mediaRecorder.ondataavailable = handleDataAvailable;
+                mediaRecorder.onstop = handleStop;
+                
+                recordedChunks = [];
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // 开始自动动画
+                await startRecordingAnimation();
+                
+            } catch (err) {
+                console.error("录制失败:", err);
+                overlay.style.display = 'none';
+                status.style.display = 'none';
+                recordButton.disabled = false;
+                alert('录制失败: ' + err.message);
+            }
+        }
+    }
+    
+    // 修改动画控制变量
+    let rotationDuration = 24000;  // 6秒转一圈
+    let zoomDuration = 1000;      // 1秒完成缩放
+    let isAnimating = false;
+    
+    async function startRecordingAnimation() {
+        try {
+            console.log('=== 准备开始录制 ===');
+            console.log('当前视角:', viewer.getYaw());
+            isAnimating = true;
+            
+            // 保存原始配置
+            originalConfig = {
+                pitch: viewer.getPitch(),
+                yaw: viewer.getYaw(),
+                hfov: viewer.getHfov()
+            };
+            console.log('保存原始配置:', originalConfig);
+            
+            // 先将视角归零到9度并等待完成
+            console.log('开始归零视角到9度...');
+            viewer.setPitch(0);
+            viewer.setYaw(9);
+            viewer.setHfov(120);
+            
+            // 等待视角归零完成
+            await new Promise(resolve => {
+                function checkAngle() {
+                    const currentAngle = viewer.getYaw();
+                    if (Math.abs(currentAngle - 9) < 0.1) {
+                        console.log('视角已归零到9度');
+                        resolve();
+                    } else {
+                        setTimeout(checkAngle, 50);
+                    }
+                }
+                checkAngle();
+            });
+            
+            // 开始录制
+            console.log('=== 开始录制 ===');
+            const canvas = document.querySelector('#panorama canvas');
+            const stream = canvas.captureStream(60);
+            mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'video/webm;codecs=vp9',
+                videoBitsPerSecond: 8000000
+            });
+            
+            recordedChunks = [];
+            mediaRecorder.ondataavailable = handleDataAvailable;
+            mediaRecorder.onstop = handleStop;
+            mediaRecorder.start();
+            console.log('录制器已启动');
+            
+            // 等待录制开始
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // 执行旋转动画
+            console.log('=== 开始旋转动画 ===');
+            await new Promise((resolve) => {
+                let currentAngle = 9;
+                const angleStep = 9;
+                let hasReached171 = false;
+                
+                async function animate() {
+                    if (!isAnimating) {
+                        console.log('动画被中断');
+                        resolve();
+                        return;
+                    }
+                    
+                    if (!hasReached171) {
+                        // 第一阶段：9° -> 171°
+                        currentAngle += angleStep;
+                        console.log(`第一阶段 [9° -> 171°], 目标: ${currentAngle}°`);
+                        
+                        viewer.setYaw(currentAngle);
+                        
+                        // 等待角度变化完成
+                        await new Promise(resolveAngle => {
+                            function checkAngle() {
+                                const actualAngle = viewer.getYaw();
+                                if (Math.abs(actualAngle - currentAngle) < 0.5) {
+                                    resolveAngle();
+                                } else {
+                                    setTimeout(checkAngle, 50);
+                                }
+                            }
+                            checkAngle();
+                        });
+                        
+                        if (currentAngle >= 171) {
+                            console.log('=== 到达171°，准备切换到第二阶段 ===');
+                            hasReached171 = true;
+                            currentAngle = -180;
+                            console.log('切换到 -180°');
+                        }
+                    } else {
+                        // 第二阶段：-180° -> -9°
+                        currentAngle += angleStep;
+                        console.log(`第二阶段 [-180° -> -9°], 目标: ${currentAngle}°`);
+                        
+                        viewer.setYaw(currentAngle);
+                        
+                        // 等待角度变化完成
+                        await new Promise(resolveAngle => {
+                            function checkAngle() {
+                                const actualAngle = viewer.getYaw();
+                                if (Math.abs(actualAngle - currentAngle) < 0.5) {
+                                    resolveAngle();
+                                } else {
+                                    setTimeout(checkAngle, 50);
+                                }
+                            }
+                            checkAngle();
+                        });
+                        
+                        if (currentAngle >= -9) {
+                            console.log('=== 到达终点-9° ===');
+                            viewer.setYaw(-9);
+                            console.log('完成完整旋转，实际角度:', viewer.getYaw());
+                            isAnimating = false;
+                            resolve();
+                            return;
+                        }
+                    }
+                    
+                    requestAnimationFrame(() => animate());
+                }
+                
+                animate();
+            });
+            
+            console.log('=== 旋转动画完成 ===');
+            console.log('等待最后一帧渲染...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('停止录制');
+            stopRecording();
+            
+        } catch (error) {
+            console.error('=== 动画执行失败 ===');
+            console.error('错误详情:', error);
+            isAnimating = false;
+            stopRecording();
+        }
+    }
+    
+    function handleDataAvailable(event) {
+        if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+        }
+    }
+    
+    function handleStop() {
+        const blob = new Blob(recordedChunks, {
+            type: 'video/webm'
+        });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `panorama_${new Date().getTime()}.webm`;
+        
+        // 显示成功提示
+        const status = document.getElementById('recordingStatus');
+        status.textContent = "正在保存视频...";
+        status.style.display = 'block';
+        
+        // 触发下载
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 更新状态
+        setTimeout(() => {
+            status.textContent = "视频已保存为 WebM 格式\n可使用格式工厂等工具转换为 MP4";
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }, 500);
+        
+        // 恢复原始视角
+        if (originalConfig) {
+            viewer.setPitch(originalConfig.pitch);
+            viewer.setYaw(originalConfig.yaw);
+            viewer.setHfov(originalConfig.hfov);
+        }
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            isRecording = false;
+            isAnimating = false;
+            
+            document.getElementById('recordingOverlay').style.display = 'none';
+            document.getElementById('recordingStatus').style.display = 'none';
+            
+            const recordButton = document.getElementById('recordButton');
+            recordButton.disabled = false;
+            recordButton.textContent = '开始录制';
+            recordButton.style.background = 'rgba(255, 0, 0, 0.5)';
+        }
+    }
+    </script>
+</body>
+</html>
